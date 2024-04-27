@@ -1,0 +1,32 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFrameworks>netstandard2.0;net6.0</TargetFrameworks>
+		<ImplicitUsings>disable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<LangVersion>11.0</LangVersion>
+		
+		<Authors>2code</Authors>
+		<PackageProjectUrl>https://github.com/2code-it/Code2.Tools.Csv.Repos</PackageProjectUrl>
+		<PackageTags>csv repository tools di</PackageTags>
+		<RepositoryUrl>https://github.com/2code-it/Code2.Tools.Csv.Repos.git</RepositoryUrl>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+		<Description>Tools and services to update csv files and load them as typed repositories</Description>
+		<Title>$(AssemblyName)</Title>
+		<PackageLicenseExpression>BSD-2-Clause</PackageLicenseExpression>
+		<AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
+		
+	</PropertyGroup>
+
+	<ItemGroup>
+		<None Include="..\..\README.md">
+			<Pack>True</Pack>
+			<PackagePath>\</PackagePath>
+		</None>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <PackageReference Include="Code2.Tools.Csv" Version="0.1.37" />
+	  <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.1" />
+	</ItemGroup>
+</Project>
