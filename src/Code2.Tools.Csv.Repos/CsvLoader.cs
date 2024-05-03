@@ -81,7 +81,7 @@ namespace Code2.Tools.Csv.Repos
 			IRepository<T> repo = (IRepository<T>)repository;
 			if (clearRepository) repo.Clear();
 			using ICsvReader<T> csvReader = _csvReaderFactory.Create<T>(filePath, readerOptions);
-			csvReader.Error += (_, e) => { OnCsvReaderErrorInner((Exception)e.ExceptionObject); };
+			csvReader.Error += CsvReaderErrorHandler;
 			while (!csvReader.EndOfStream)
 			{
 				T[] data = csvReader.ReadObjects(_options.CsvReaderReadAmount);
@@ -90,12 +90,12 @@ namespace Code2.Tools.Csv.Repos
 			}
 		}
 
-		private void OnCsvReaderErrorInner(Exception exception)
+		private void CsvReaderErrorHandler(object sender, UnhandledExceptionEventArgs eventArgs)
 		{
 			bool handled = CsvReaderError is not null;
-			OnCsvReaderError(exception, ref handled);
-			CsvReaderError?.Invoke(this, new UnhandledExceptionEventArgs(exception, false));
-			if (!handled) throw exception;
+			OnCsvReaderError((Exception)eventArgs.ExceptionObject, ref handled);
+			CsvReaderError?.Invoke(this, eventArgs);
+			if (!handled) throw (Exception)eventArgs.ExceptionObject;
 		}
 
 		private void EnsureDataDirectoryExists()
