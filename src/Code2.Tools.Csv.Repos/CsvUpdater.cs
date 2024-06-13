@@ -10,16 +10,14 @@ namespace Code2.Tools.Csv.Repos
 {
 	public class CsvUpdater : ICsvUpdater, IDisposable
 	{
-		public CsvUpdater(CsvReposOptions options, ICsvLoader csvLoader) : this(options, csvLoader, new ReflectionUtility()) { }
-		internal CsvUpdater(CsvReposOptions options, ICsvLoader csvLoader, IReflectionUtility reflectionUtility)
+		public CsvUpdater(ICsvLoader csvLoader, CsvReposOptions? options) : this(csvLoader, options, new ReflectionUtility()) { }
+		internal CsvUpdater(ICsvLoader csvLoader, CsvReposOptions? options, IReflectionUtility reflectionUtility)
 		{
-			_options = options;
 			_csvLoader = csvLoader;
 			_reflectionUtility = reflectionUtility;
-			Tasks.AddRange(GetTasksFromOptions(_options));
+			if (options is not null) Configure(options);
 		}
 
-		private readonly CsvReposOptions _options;
 		private readonly ICsvLoader _csvLoader;
 		private readonly IReflectionUtility _reflectionUtility;
 		private const int _ms_per_hour = 3600000;
@@ -48,6 +46,17 @@ namespace Code2.Tools.Csv.Repos
 		public async Task RunAllTasksAsync()
 		{
 			await RunAllTasksInner();
+		}
+
+		public void Configure(CsvReposOptions options)
+		{
+			Tasks.Clear();
+			Tasks.AddRange(GetTasksFromOptions(options));
+		}
+
+		public void Dispose()
+		{
+			_timer?.Dispose();
 		}
 
 		private void OnTimerTick(object? state)
@@ -103,11 +112,6 @@ namespace Code2.Tools.Csv.Repos
 			taskInstance.IntervalInHours = taskInfo.IntervalInHours;
 			taskInstance.ReloadTargetTypeNames = taskInfo.ReloadTargetTypeNames;
 			return taskInstance;
-		}
-
-		public void Dispose()
-		{
-			_timer?.Dispose();
 		}
 
 		private static int GetNextFullHourOffsetInMs()

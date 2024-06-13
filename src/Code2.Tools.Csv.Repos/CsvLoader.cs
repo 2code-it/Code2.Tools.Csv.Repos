@@ -90,7 +90,7 @@ namespace Code2.Tools.Csv.Repos
 			}
 		}
 
-		private void CsvReaderErrorHandler(object sender, UnhandledExceptionEventArgs eventArgs)
+		private void CsvReaderErrorHandler(object? sender, UnhandledExceptionEventArgs eventArgs)
 		{
 			bool handled = CsvReaderError is not null;
 			OnCsvReaderError((Exception)eventArgs.ExceptionObject, ref handled);

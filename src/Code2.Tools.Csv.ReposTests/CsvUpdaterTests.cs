@@ -18,7 +18,7 @@ namespace Code2.Tools.Csv.Repos.Tests
 		public void Start_When_Started_Expect_IsRunningTrue()
 		{
 			ResetDependencies();
-			using CsvUpdater csvUpdater = new CsvUpdater(_options, _csvLoader, _reflectionUtility);
+			using CsvUpdater csvUpdater = new CsvUpdater(_csvLoader, _options, _reflectionUtility);
 
 			csvUpdater.Start();
 
@@ -30,7 +30,7 @@ namespace Code2.Tools.Csv.Repos.Tests
 		public void Start_When_StartedTwice_Expect_Exception()
 		{
 			ResetDependencies();
-			using CsvUpdater csvUpdater = new CsvUpdater(_options, _csvLoader, _reflectionUtility);
+			using CsvUpdater csvUpdater = new CsvUpdater(_csvLoader, _options, _reflectionUtility);
 
 			csvUpdater.Start();
 			csvUpdater.Start();
@@ -42,7 +42,7 @@ namespace Code2.Tools.Csv.Repos.Tests
 		public void Start_When_StopAfterStart_Expect_IsRunningFalse()
 		{
 			ResetDependencies();
-			using CsvUpdater csvUpdater = new CsvUpdater(_options, _csvLoader, _reflectionUtility);
+			using CsvUpdater csvUpdater = new CsvUpdater(_csvLoader, _options, _reflectionUtility);
 
 			csvUpdater.Start();
 			csvUpdater.Stop();
@@ -59,7 +59,7 @@ namespace Code2.Tools.Csv.Repos.Tests
 			updateTask.IntervalInHours.Returns(1);
 			updateTask.CanRunAsync().Returns(Task.FromResult(true));
 			updateTask.RunAsync().Returns(Task.CompletedTask);
-			using CsvUpdater csvUpdater = new CsvUpdater(_options, _csvLoader, _reflectionUtility);
+			using CsvUpdater csvUpdater = new CsvUpdater(_csvLoader, _options, _reflectionUtility);
 			csvUpdater.Tasks.Add(updateTask);
 
 			await csvUpdater.RunAllTasksAsync();
@@ -76,7 +76,7 @@ namespace Code2.Tools.Csv.Repos.Tests
 			updateTask.IntervalInHours.Returns(1);
 			updateTask.CanRunAsync().Returns(Task.FromResult(false));
 			updateTask.RunAsync().Returns(Task.CompletedTask);
-			using CsvUpdater csvUpdater = new CsvUpdater(_options, _csvLoader, _reflectionUtility);
+			using CsvUpdater csvUpdater = new CsvUpdater(_csvLoader, _options, _reflectionUtility);
 			csvUpdater.Tasks.Add(updateTask);
 
 			await csvUpdater.RunAllTasksAsync();
@@ -93,7 +93,7 @@ namespace Code2.Tools.Csv.Repos.Tests
 			updateTask.IntervalInHours.Returns(1);
 			updateTask.CanRunAsync().Returns(Task.FromResult(true));
 			updateTask.RunAsync().Returns(Task.CompletedTask);
-			using CsvUpdater csvUpdater = new CsvUpdater(_options, _csvLoader, _reflectionUtility);
+			using CsvUpdater csvUpdater = new CsvUpdater(_csvLoader, _options, _reflectionUtility);
 			csvUpdater.Tasks.Add(updateTask);
 
 			await csvUpdater.RunAllTasksAsync();
@@ -111,7 +111,7 @@ namespace Code2.Tools.Csv.Repos.Tests
 			updateTask.IntervalInHours.Returns(1);
 			updateTask.CanRunAsync().Returns(Task.FromResult(true));
 			updateTask.RunAsync().ThrowsAsync(new InvalidOperationException("task failed"));
-			using CsvUpdater csvUpdater = new CsvUpdater(_options, _csvLoader, _reflectionUtility);
+			using CsvUpdater csvUpdater = new CsvUpdater(_csvLoader, _options, _reflectionUtility);
 			csvUpdater.Tasks.Add(updateTask);
 
 			await csvUpdater.RunAllTasksAsync();
@@ -126,7 +126,7 @@ namespace Code2.Tools.Csv.Repos.Tests
 			updateTask.IntervalInHours.Returns(1);
 			updateTask.CanRunAsync().Returns(Task.FromResult(true));
 			updateTask.RunAsync().ThrowsAsync(new InvalidOperationException("task failed"));
-			using CsvUpdater csvUpdater = new CsvUpdater(_options, _csvLoader, _reflectionUtility);
+			using CsvUpdater csvUpdater = new CsvUpdater(_csvLoader, _options, _reflectionUtility);
 			csvUpdater.TaskError += (s, e) => { };
 			csvUpdater.Tasks.Add(updateTask);
 
@@ -143,7 +143,7 @@ namespace Code2.Tools.Csv.Repos.Tests
 			updateTask.ReloadTargetTypeNames = new[] { "*" };
 			updateTask.CanRunAsync().Returns(Task.FromResult(true));
 			updateTask.RunAsync().Returns(Task.CompletedTask);
-			using CsvUpdater csvUpdater = new CsvUpdater(_options, _csvLoader, _reflectionUtility);
+			using CsvUpdater csvUpdater = new CsvUpdater(_csvLoader, _options, _reflectionUtility);
 			csvUpdater.Tasks.Add(updateTask);
 
 			await csvUpdater.RunAllTasksAsync();

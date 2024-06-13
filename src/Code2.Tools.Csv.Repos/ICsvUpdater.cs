@@ -12,5 +12,6 @@ namespace Code2.Tools.Csv.Repos
 		Task RunAllTasksAsync();
 		void Start();
 		void Stop();
+		void Configure(CsvReposOptions options);
 	}
 }
