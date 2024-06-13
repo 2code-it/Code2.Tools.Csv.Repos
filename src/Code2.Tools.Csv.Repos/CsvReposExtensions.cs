@@ -9,6 +9,7 @@ namespace Code2.Tools.Csv.Repos
 	public static class CsvReposExtensions
 	{
 		private static readonly ReflectionUtility _reflectionUtility = new ReflectionUtility();
+		private static ICsvUpdater? _csvUpdater;
 
 		public static void AddCsvRepos(this IServiceCollection services, CsvReposOptions options)
 		{
@@ -37,14 +38,14 @@ namespace Code2.Tools.Csv.Repos
 			CsvReposOptions options = serviceProvider.GetRequiredService<CsvReposOptions>();
 			if (updateOnStart is not null) options.UpdateOnStart = updateOnStart.Value;
 			if (loadOnStart is not null) options.LoadOnStart = loadOnStart.Value;
-			ICsvUpdater csvUpdater = serviceProvider.GetRequiredService<ICsvUpdater>();
+			_csvUpdater = serviceProvider.GetRequiredService<ICsvUpdater>();
 			if (options.UpdateOnStart)
 			{
-				await csvUpdater.RunAllTasksAsync();
+				await _csvUpdater.RunAllTasksAsync();
 			}
 			if (options.UpdateTasks.Count > 0)
 			{
-				csvUpdater.Start();
+				_csvUpdater.Start();
 			}
 			if (options.LoadOnStart)
 			{
