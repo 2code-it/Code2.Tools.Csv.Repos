@@ -59,19 +59,9 @@ namespace Code2.Tools.Csv.Repos
 			_timer?.Dispose();
 		}
 
-		private void OnTimerTick(object? state)
+		private async void OnTimerTick(object? state)
 		{
-			RunAllTasksInner().Wait(0);
-		}
-
-		private void OnTaskErrorInner(ICsvUpdateTask updateTask, Exception exception)
-		{
-			bool handled = TaskError is not null;
-			string exceptionMessage = $"Update task '{updateTask.GetType().Name}' failed";
-			InvalidOperationException invalidOperationException = new InvalidOperationException(exceptionMessage, exception);
-			OnTaskError(updateTask, invalidOperationException, ref handled);
-			TaskError?.Invoke(this, new UnhandledExceptionEventArgs(invalidOperationException, false));
-			if (!handled) throw invalidOperationException;
+			await RunAllTasksInner();
 		}
 
 		private async Task RunAllTasksInner()
@@ -85,19 +75,27 @@ namespace Code2.Tools.Csv.Repos
 					if (!await updateTask.CanRunAsync()) continue;
 					OnBeforeTaskRun(updateTask);
 					await updateTask.RunAsync();
+					updateTask.LastRun = now;
 					OnAfterTaskRun(updateTask);
 				}
 				catch (Exception ex)
 				{
 					OnTaskErrorInner(updateTask, ex);
+					continue;
 				}
 
-				updateTask.LastRun = now;
-				if (updateTask.ReloadTargetTypeNames is not null && updateTask.ReloadTargetTypeNames.Length > 0)
-				{
-					await _csvLoader.LoadAsync(updateTask.ReloadTargetTypeNames[0] == "*" ? null : updateTask.ReloadTargetTypeNames);
-				}
+				if ((updateTask.ReloadTargetTypeNames?.Length ?? 0) == 0) continue;
+				await _csvLoader.LoadAsync(updateTask.ReloadTargetTypeNames![0] == "*" ? null : updateTask.ReloadTargetTypeNames);
 			}
+		}
+		private void OnTaskErrorInner(ICsvUpdateTask updateTask, Exception exception)
+		{
+			bool handled = TaskError is not null;
+			string exceptionMessage = $"Update task '{updateTask.GetType().Name}' failed";
+			InvalidOperationException invalidOperationException = new InvalidOperationException(exceptionMessage, exception);
+			OnTaskError(updateTask, invalidOperationException, ref handled);
+			TaskError?.Invoke(this, new UnhandledExceptionEventArgs(invalidOperationException, false));
+			if (!handled) throw invalidOperationException;
 		}
 
 		private ICsvUpdateTask[] GetTasksFromOptions(CsvReposOptions options)
