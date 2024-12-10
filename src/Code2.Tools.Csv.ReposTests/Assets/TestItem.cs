@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace Code2.Tools.Csv.ReposTests
+namespace Code2.Tools.Csv.ReposTests.Assets
 {
 	public class TestItem
 	{

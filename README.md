@@ -1,39 +1,77 @@
 # Code2.Tools.Csv.Repos
-Tools and services to maintain csv repositories
+Tools and services to use and maintain csv repositories
 
 
 ## Options
-- CsvDataDirectory, data directory path, default "./data"
-- Files, list of csv file info objects
-  - NameFilter, csv file name filter
-  - TargetTypeName, type name for deseriliazing a csv line
-  - RepositoryTypeName, name of repository type implementing IRespository, default "MemoryRepository`1"
-  - CsvReaderOptions, file specific reader options
-- UpdateTasks, list of csv update task info objects
-  - IntervalInHours, time in hours between runs
-  - TaskTypeName, name of update task type implementing ICsvUpdateTask
-  - TaskProperties, dictionary of strings with the keys matching TaskType properties
-  - ReloadTargetTypeNames, array of type names to reload the repository for after the task completed
-- CsvReaderOptions, fallback CsvReaderOptions
-- CsvReaderAmount, csv read amount
-- LoadOnStart, indicator to load configured files on start
-- UpdateOnstart, indicator to run configured update tasks on start
+- DefaultReaderOptions, fallback csv reader options (optional)
+- CsvReadSize, csv reader read chunk size (default: 5000)
+- UpdateIntervalInMinutes, update timer interval in minutes (default: 5)
+- RetryIntervalInMinutes, fallback update task retry interval in minutes (default: 60)
+- Files, array of csv file option objects
+  - FilePath, csv file path
+  - TypeName, type name for deserializing a csv line (optional)
+  - Repository, repository instance implementing IRespository<> (optional)
+  - CsvReaderOptions, file specific reader options (optional)
+- UpdateTasks, array of csv update task option objects
+  - TaskTypeName, type name of update task implementing ICsvUpdateTask (optional)
+  - TaskType, type of update task implementing ICsvUpdateTask (optional)
+  - AffectedTypeNames, list of affected file type names, when the task completes will trigger a reload corresponding repository (optional)
+  - IntervalInMinutes, task run interval in minutes
+  - RetryIntervalInMinutes, task run interval in minutes in case of an unsuccessful run (optional)
+  - IsDisabled, indicates whether the task is disabled (default: false)
+  - Properties, collection of task specific property values by name (optional)
 
-## Example
+
+## Example 
+Configure and using csv data
 ```
+/*
+[sample file: people.csv]
+id,first,last,age
+1,don,joe,23
+2,dane,joe,21
+..
+*/
+
+// AIO wonder Program.cs
+using Microsoft.Extensions.DependencyInjection;
+using Code2.Tools.Csv.Repos;
+using System;
+using System.Linq;
+using System.Collections.Generic;
+
+//configure services
 IServiceCollection services = new ServiceCollection();
+services.AddCsvRepos(x => x.AddFile<Person>("./people.csv", readerOptions => readerOptions.HasHeaderRow = true));
 
-services.AddCsvRepos(options => {
-	options.CsvDataDirectory = "./csv";
-	options.Files.Add(new CsvFileInfo { NameFilter = "products.csv", TargetTypeName = "Product" });
-	options.UpdateTasks.Add(new CsvUpdateTaskInfo { IntervalInHours = 24, ReloadTargetTypeNames = new[] { "Product" }, TaskTypeName = "UpdateTaskProducts" });
-	options.LoadOnStart = true;
-	options.UpdateOnStart = true;
-});
+//activate services
+var serviceProvider = services.BuildServiceProvider();
+serviceProvider.UseCsvRepos(loadOnStart: true);
 
-IServiceProvider serviceProvider = services.BuildServiceProvider();
-await serviceProvider.UseCsvReposAsync();
+//use services
+var repo = serviceProvider.GetRequiredService<ICsvRepository<Person>>();
+var count = repo.Get().Count();
+var first = repo.Get(x => x.Id == 2).First();
 
-IRepository<Product> productRepo = serviceProvider.GetRequiredService<IRepository<Product>>();
-var latest = productRepo.Get(x => x.Lastmodified > DateTime.Now.AddDays(-1));
+Console.WriteLine("count: {0}", count);
+Console.WriteLine("first: {0}, {1} {2}", first.Id, first.First, first.Last);
+
+//data item
+public class Person
+{
+	public int Id { get; set; }
+	public string First { get; set; } = string.Empty;
+	public string Last { get; set; } = string.Empty;
+	public int Age { get; set; }
+}
+
+//simple repositry using List<>
+public class PeopleRepository : ICsvRepository<Person>
+{
+	private readonly List<Person> _people = new List<Person>();
+
+	public void Add(IEnumerable<Person> items) => _people.AddRange(items);
+	public void Clear() => _people.Clear();
+	public IEnumerable<Person> Get(Func<Person, bool>? filter = null) => _people.Where(x => filter is null || filter(x)).ToArray();
+}
 ```

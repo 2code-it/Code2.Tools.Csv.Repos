@@ -1,21 +1,21 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
-		<TargetFrameworks>netstandard2.0;net6.0</TargetFrameworks>
+		<TargetFrameworks>netstandard2.0;net8.0</TargetFrameworks>
 		<ImplicitUsings>disable</ImplicitUsings>
 		<Nullable>enable</Nullable>
 		<LangVersion>11.0</LangVersion>
 		
 		<Authors>2code</Authors>
 		<PackageProjectUrl>https://github.com/2code-it/Code2.Tools.Csv.Repos</PackageProjectUrl>
-		<PackageTags>csv repository tools di</PackageTags>
+		<PackageTags>csv repository tools</PackageTags>
 		<RepositoryUrl>https://github.com/2code-it/Code2.Tools.Csv.Repos.git</RepositoryUrl>
 		<PackageReadmeFile>README.md</PackageReadmeFile>
-		<Description>Tools and services to update csv files and load them as typed repositories</Description>
+		<Description>Tools and services to use and maintain csv repositories</Description>
 		<Title>$(AssemblyName)</Title>
 		<PackageLicenseExpression>BSD-2-Clause</PackageLicenseExpression>
 		<AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
-		
+		<Deterministic>true</Deterministic>
 	</PropertyGroup>
 
 	<ItemGroup>

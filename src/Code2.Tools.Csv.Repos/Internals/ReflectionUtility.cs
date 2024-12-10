@@ -1,83 +1,147 @@
-﻿using System;
+﻿using Microsoft.Extensions.DependencyInjection;
+using System;
 using System.Collections.Generic;
-using System.Data;
 using System.Linq;
 using System.Reflection;
 
-namespace Code2.Tools.Csv.Repos.Internals
+
+namespace Code2.Tools.Csv.Repos.Internals;
+
+internal class ReflectionUtility : IReflectionUtility
 {
-	internal class ReflectionUtility : IReflectionUtility
+	public ReflectionUtility()
 	{
-		public ReflectionUtility()
+		_nonFrameworkAssemblies = AppDomain.CurrentDomain.GetAssemblies().Where(x => !x.IsDynamic && !IsFrameworkAssembly(x)).ToArray();
+		_nonFrameworkClasses = _nonFrameworkAssemblies.SelectMany(x => x.ExportedTypes).Where(x => x.IsClass).ToArray();
+	}
+
+	private readonly Assembly[] _nonFrameworkAssemblies;
+	private readonly Type[] _nonFrameworkClasses;
+
+	public Type GetRequiredClassType(string classTypeName)
+	{
+		return _nonFrameworkClasses.FirstOrDefault(x => x.Name == classTypeName) ?? throw new InvalidOperationException($"Required type '{classTypeName}' not found");
+	}
+
+	public Type[] GetClasses(Func<Type, bool>? filter)
+		=> _nonFrameworkClasses.Where(x => filter is null || filter(x)).ToArray();
+
+	public Type? GetGenericInterface(Type source, Type genericTypeDefinition)
+		=> source.GetInterfaces().Where(x => x.IsGenericType && x.GetGenericTypeDefinition() == genericTypeDefinition).FirstOrDefault();
+
+	public object? InvokePrivateGenericMethod(object instance, string methodName, Type genericArgumentType, object[] parameters)
+	{
+		MethodInfo? methodInfo = instance.GetType().GetMethod(methodName, BindingFlags.Instance | BindingFlags.NonPublic);
+		if (methodInfo is null) throw new InvalidOperationException($"Method '{methodName}' not found");
+		if (!methodInfo.IsGenericMethod) throw new InvalidOperationException("Method is not generic");
+
+		return methodInfo.MakeGenericMethod(genericArgumentType).Invoke(instance, parameters);
+	}
+
+	public object ActivatorCreateInstance(Type type, IServiceProvider? serviceProvider = null)
+	{
+		if (serviceProvider is not null) return ActivatorUtilities.CreateInstance(serviceProvider, type);
+		return Activator.CreateInstance(type) ?? throw new InvalidOperationException($"Failed to create instance of type {type}");
+	}
+
+	public T GetShallowCopy<T>(T source) where T : new()
+	{
+		T result = new();
+		var properties = typeof(T).GetProperties()
+			.Where(x => x.CanRead && x.CanWrite && (IsValueTypeOrString(x.PropertyType) || IsArrayOfValueTypeOrstring(x.PropertyType)))
+			.ToArray();
+		foreach (var property in properties)
 		{
-			_nonSystemDomainTypes = AppDomain.CurrentDomain.GetAssemblies().Where(x => !x.IsDynamic).SelectMany(x => x.ExportedTypes.Where(NonSystemTypeFilter)).ToArray();
-		}
-
-		private readonly Type[] _nonSystemDomainTypes;
-		private const string _repositoryInterfaceTypeName = "IRepository`1";
-
-		public Type GetRequiredType(string typeName)
-			=> _nonSystemDomainTypes.FirstOrDefault(x => x.Name == typeName) ?? throw new InvalidOperationException($"Required type '{typeName}' not found");
-
-		public bool HasConstructorFor(Type type, Type[] constructorParams)
-		{
-			return type.GetConstructors().Where(x => x.IsPublic).Select(x => x.GetParameters().Select(y => y.ParameterType).ToArray())
-				.Where(x => x.Length == constructorParams.Length)
-				.Any(x => x.Select((t, i) => t == constructorParams[i] ? 1 : 0).Sum() == constructorParams.Length);
-		}
-
-
-		public Type GetRepositoryType(string repositoryTypeName, string? genericParameterTypeName = null)
-		{
-			Type? repositoryType = _nonSystemDomainTypes.FirstOrDefault(x => x.Name == repositoryTypeName);
-			if (repositoryType is null) throw new InvalidOperationException($"Repository type '{repositoryTypeName}' not found");
-			if (repositoryType.GetInterface(_repositoryInterfaceTypeName) is null) throw new InvalidOperationException($"Type '{repositoryTypeName}' is not assignable to IRepository<>");
-			if (!repositoryType.IsGenericType) return repositoryType;
-			if (genericParameterTypeName is null) throw new InvalidOperationException($"Generic parameter type name is required");
-			Type genericParameterType = GetRequiredType(genericParameterTypeName);
-			return repositoryType.MakeGenericType(genericParameterType);
-		}
-
-		public Type GetRepositoryInterfaceType(string repositoryTypeName, string? genericParameterTypeName = null)
-			=> GetRepositoryInterfaceType(GetRepositoryType(repositoryTypeName, genericParameterTypeName));
-
-		public Type GetRepositoryInterfaceType(Type repositoryType)
-			=> repositoryType.GetInterface(_repositoryInterfaceTypeName) ?? throw new InvalidOperationException($"{repositoryType} does not implement IRepository");
-
-		public void SetProperties(object instance, IDictionary<string, string> properties)
-		{
-			PropertyInfo[] propertyInfos = instance.GetType().GetProperties().Where(x => x.CanWrite && properties.Keys.Contains(x.Name, StringComparer.InvariantCultureIgnoreCase)).ToArray();
-			foreach (PropertyInfo propertyInfo in propertyInfos)
+			var value = property.GetValue(source);
+			if (value is null) continue;
+			if (property.PropertyType.IsArray)
 			{
-				string stringValue = properties[propertyInfo.Name];
+				value = typeof(ReflectionUtility).GetMethod(nameof(NewArray), BindingFlags.Static | BindingFlags.NonPublic)!
+						.MakeGenericMethod(property.PropertyType.GetElementType()!)
+						.Invoke(null, new[] { value });
+			}
+			property.SetValue(result, value);
+		}
+		return result;
+	}
 
-				try
-				{
-					object value = Convert.ChangeType(stringValue, propertyInfo.PropertyType);
-					propertyInfo.SetValue(instance, value, null);
-				}
-				catch (Exception ex)
-				{
-					throw new InvalidOperationException($"Failed to set value for property {propertyInfo.Name}", ex);
-				}
+	public Dictionary<string, string> GetValueTypeOrStringProperties(object source, Func<PropertyInfo, bool>? filter = null)
+		=> source.GetType().GetProperties().Where(x => x.CanRead && IsValueTypeOrString(x.PropertyType) && (filter is null || filter(x)))
+			.Select(x => (name: x.Name, value: x.GetValue(source)))
+			.Where(x => x.value is not null)
+			.ToDictionary(x => x.name, x => Convert.ToString(x.value)!);
+
+	public void SetValueTypeOrStringProperties(object source, Dictionary<string, string> propertyValues)
+	{
+		Type type = source.GetType();
+		var properties = type.GetProperties().Where(x => x.CanWrite && IsValueTypeOrString(x.PropertyType)).ToArray();
+		foreach (var property in properties)
+		{
+			string? value;
+			if (!propertyValues.TryGetValue(property.Name, out value)) continue;
+			try
+			{
+				property.SetValue(source, Convert.ChangeType(value, property.PropertyType));
+			}
+			catch (Exception ex)
+			{
+				throw new InvalidOperationException($"Failed to set property value for '{type.Name}.{property.Name}' to '{value?.Substring(0, 20)}'", ex);
 			}
 		}
-
-		public void InvokePrivateGenericMethod(object instance, string methodName, Type genericArgumentType, object[] parameters)
-		{
-			MethodInfo? methodInfo = instance.GetType().GetMethod(methodName, BindingFlags.Instance | BindingFlags.NonPublic);
-			if (methodInfo is null) throw new InvalidOperationException($"Method '{methodName}' not fond");
-			if (!methodInfo.IsGenericMethod) throw new InvalidOperationException("Method is not generic");
-
-			methodInfo.MakeGenericMethod(genericArgumentType).Invoke(instance, parameters);
-		}
-
-		private static bool NonSystemTypeFilter(Type type)
-		{
-			if (type.Namespace is null) return false;
-			if (type.Namespace.StartsWith("System")) return false;
-			if (type.Namespace.StartsWith("Microsoft")) return false;
-			return true;
-		}
 	}
+
+	public object? GetOrCreateRepository(object? repoInstance, Type? itemType, IServiceProvider? serviceProvider = null)
+	{
+		if (repoInstance is not null) return repoInstance;
+		if (itemType is not null)
+		{
+			Type repoInterfaceType = GetRepositoryInterfaceType(repoInstance, itemType);
+			var repo = serviceProvider?.GetService(repoInterfaceType);
+			if (repo is null)
+			{
+				Type repoImplementationType = GetRepositoryImplementationType(null, itemType);
+				repo = ActivatorCreateInstance(repoImplementationType, serviceProvider);
+			}
+			return repo;
+		}
+		return null;
+	}
+
+	public Type GetRepositoryImplementationType(object? repoInstance, Type? itemType)
+	{
+		if (repoInstance is not null) return repoInstance.GetType();
+		Type repoInterfaceType = GetRepositoryInterfaceType(repoInstance, itemType);
+		return GetClasses(x => !x.IsGenericType && repoInterfaceType.IsAssignableFrom(x)).FirstOrDefault()
+				?? throw new InvalidOperationException($"Implementation for {repoInterfaceType} not found");
+	}
+
+	public Type GetRepositoryInterfaceType(object? repoInstance, Type? itemType)
+	{
+		if (repoInstance is not null)
+		{
+			return GetGenericInterface(repoInstance.GetType(), typeof(ICsvRepository<>))
+				?? throw new InvalidOperationException($"{repoInstance.GetType().Name} does not implement {typeof(ICsvRepository<>).Name}");
+		}
+		if (itemType is not null)
+		{
+			return typeof(ICsvRepository<>).MakeGenericType(itemType);
+		}
+
+		throw new InvalidOperationException($"Interface can not be determined, {nameof(CsvFileOptions.TypeName)} and {nameof(CsvFileOptions.Repository)} not defined");
+	}
+
+	internal static bool IsValueTypeOrString(Type type)
+	{
+		type = Nullable.GetUnderlyingType(type) ?? type;
+		return type.IsValueType || type == typeof(string);
+	}
+
+	internal static bool IsArrayOfValueTypeOrstring(Type type)
+		=> type.IsArray && IsValueTypeOrString(type.GetElementType()!);
+
+	internal static object NewArray<T>(object arrayObject)
+		=> ((IEnumerable<T>)arrayObject).ToArray();
+
+	private static bool IsFrameworkAssembly(Assembly assembly)
+		=> assembly.GetCustomAttribute<AssemblyProductAttribute>()?.Product == "Microsoft® .NET";
 }
