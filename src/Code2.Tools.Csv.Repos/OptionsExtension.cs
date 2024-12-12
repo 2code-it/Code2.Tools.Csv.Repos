@@ -14,6 +14,14 @@ public static class OptionsExtension
 		return options;
 	}
 
+	public static CsvReposOptions AddFile<T>(this CsvReposOptions options, string filePath, ICsvRepository<T> repository, Action<CsvReaderOptions>? configReaderOptions = null)
+		where T : class
+	{
+		CsvReaderOptions? readerOptions = GetReaderOptions(configReaderOptions);
+		AddFileInternal(options, filePath, null, null, repository, readerOptions);
+		return options;
+	}
+
 	private static void AddFileInternal(CsvReposOptions options, string filePath, Type? type = null, string? typeName = null, object? repo = null, CsvReaderOptions? readerOptions = null)
 	{
 		List<CsvFileOptions> list = new List<CsvFileOptions>();
