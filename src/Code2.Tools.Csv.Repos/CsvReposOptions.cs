@@ -2,7 +2,7 @@
 public class CsvReposOptions
 {
 	public CsvReaderOptions? DefaultReaderOptions { get; set; }
-	public int? CsvReadSize { get; set; }
+	public int? ReaderReadSize { get; set; }
 	public CsvFileOptions[]? Files { get; set; }
 	public CsvUpdateTaskOptions[]? UpdateTasks { get; set; }
 	public int? UpdateIntervalInMinutes { get; set; }

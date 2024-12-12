@@ -24,7 +24,7 @@ public class CsvReposManager : ICsvReposManager
 	private CsvReaderOptions? _defaultReaderOptions;
 	private int _updateIntervalInMinutes = 5;
 	private int _retryIntervalInMinutes = 60;
-	private int _csvReadSize = 5000;
+	private int _readerReadSize = 5000;
 	private Timer? _updateTimer;
 
 	public CsvFileInfo[] Files { get; private set; } = Array.Empty<CsvFileInfo>();
@@ -80,7 +80,7 @@ public class CsvReposManager : ICsvReposManager
 	{
 		if (options.UpdateIntervalInMinutes.HasValue) _updateIntervalInMinutes = options.UpdateIntervalInMinutes.Value;
 		if (options.RetryIntervalInMinutes.HasValue) _retryIntervalInMinutes = options.RetryIntervalInMinutes.Value;
-		if (options.CsvReadSize is not null) _csvReadSize = options.CsvReadSize.Value;
+		if (options.ReaderReadSize is not null) _readerReadSize = options.ReaderReadSize.Value;
 		if (options.DefaultReaderOptions is not null) _defaultReaderOptions = _reflectionUtility.GetShallowCopy(options.DefaultReaderOptions);
 		if (options.Files is not null) Files = options.Files.Select(x => CreateCsvFileInfo(x, serviceProvider)).ToArray();
 		if (options.UpdateTasks is not null) UpdateTasks = options.UpdateTasks.Select(x => CreateUpdateTask(x, serviceProvider)).ToArray();
@@ -137,13 +137,13 @@ public class CsvReposManager : ICsvReposManager
 		return instance;
 	}
 
-	private void LoadRepository<T>(string fullFilePath, ICsvRepository<T> repository, CsvReaderOptions? csvReaderOptions = null) where T : class, new()
+	private void LoadRepository<T>(string fullFilePath, ICsvRepository<T> repository, bool clearRepository, CsvReaderOptions? csvReaderOptions) where T : class, new()
 	{
-		repository.Clear();
+		if (clearRepository) repository.Clear();
 		using var reader = _csvReaderFactory.Create<T>(fullFilePath, csvReaderOptions);
 		while (!reader.EndOfStream)
 		{
-			repository.Add(reader.ReadObjects(_csvReadSize));
+			repository.Add(reader.ReadObjects(_readerReadSize));
 		}
 	}
 
@@ -155,8 +155,4 @@ public class CsvReposManager : ICsvReposManager
 		if (UpdateTaskError is null) throw new InvalidOperationException(errorResult.Message, errorResult.SourceException);
 		UpdateTaskError(errorResult);
 	}
-
-
-
-
 }
