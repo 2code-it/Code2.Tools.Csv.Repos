@@ -48,16 +48,18 @@ public class HttpUpdateTask : ICsvUpdateTask
 			{
 				string filePath = PathGetFullPath(FilePath);
 				if (FileExists(filePath)) FileDelete(filePath);
-				using Stream fileStream = FileCreate(filePath);
-				await DownloadFileToAsync(Url, fileStream, RequestHeaders);
-				await fileStream.FlushAsync(cancellationToken);
-				fileStream.Close();
+				using (Stream fileStream = FileCreate(filePath))
+				{
+					await DownloadFileToAsync(Url, fileStream, RequestHeaders);
+					await fileStream.FlushAsync(cancellationToken);
+					fileStream.Close();
+				}
 				OnAfterRun();
 			}
 		}
 		catch (Exception ex)
 		{
-			result = Result.Error($"Update task '{nameof(HttpUpdateTask)}' failed", ex);
+			result = Result.Error($"Update task '{GetType().Name}' failed", ex);
 		}
 		finally
 		{
@@ -67,9 +69,8 @@ public class HttpUpdateTask : ICsvUpdateTask
 		return result ?? Result.Success();
 	}
 
-
 	protected virtual IResult? OnBeforeRun() { return null; }
-	protected virtual void OnAfterRun() { }
+	protected virtual IResult? OnAfterRun() { return null; }
 
 	protected async Task DownloadFileToAsync(string url, Stream fileStream, Dictionary<string, string>? headers = null)
 		=> await _httpUtility.DownloadFileToAsync(url, fileStream, headers);
@@ -77,8 +78,14 @@ public class HttpUpdateTask : ICsvUpdateTask
 	protected async Task<byte[]> GetByteArrayAsync(string url, Dictionary<string, string>? headers = null)
 		=> await _httpUtility.GetByteArrayAsync(url, headers);
 
+	protected async Task<Dictionary<string, string>> GetHeadersOnly(string url, Dictionary<string, string>? requestHeaders = null)
+		=> await _httpUtility.GetHeadersOnly(url, requestHeaders);
+
 	protected string PathGetFullPath(string filePath)
 		=> _fileSystem.PathGetFullPath(filePath);
+
+	protected string PathCombine(params string[] paths)
+		=> _fileSystem.PathCombine(paths);
 
 	protected bool FileExists(string filePath)
 		=> _fileSystem.FileExists(filePath);
@@ -94,4 +101,10 @@ public class HttpUpdateTask : ICsvUpdateTask
 
 	protected DateTime FileLastWriteTime(string filePath)
 		=> _fileSystem.FileGetLastWriteTime(filePath);
+
+	protected void DirectoryCreate(string path)
+		=> _fileSystem.DirectoryCreate(path);
+
+	protected bool DirectoryExists(string path)
+		=> _fileSystem.DirectoryExists(path);
 }
