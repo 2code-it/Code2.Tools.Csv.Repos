@@ -38,10 +38,13 @@ public class CsvReposManager : ICsvReposManager
 
 		await Task.Run(() =>
 		{
-			var filesToLoad = Files.Where(x => targetItemTypes is null || targetItemTypes.Contains(x.ItemType)).ToArray();
+			var filesToLoad = Files.Where(x => targetItemTypes is null || targetItemTypes.Contains(x.ItemType)).OrderBy(x => x.ItemType).ToArray();
+			Type? previousType = null;
 			foreach (var fileInfo in filesToLoad)
 			{
-				_reflectionUtility.InvokePrivateGenericMethod(this, nameof(LoadRepository), fileInfo.ItemType, new object[] { fileInfo.FullFilePath, fileInfo.Repository, fileInfo.CsvReaderOptions! });
+				bool clearRepository = previousType is null || fileInfo.ItemType != previousType;
+				_reflectionUtility.InvokePrivateGenericMethod(this, nameof(LoadRepository), fileInfo.ItemType, new object[] { fileInfo.FullFilePath, fileInfo.Repository, clearRepository, fileInfo.CsvReaderOptions! });
+				previousType = fileInfo.ItemType;
 			}
 		}, cancellationToken);
 	}
