@@ -4,7 +4,7 @@ Tools and services to use and maintain csv repositories
 
 ## Options
 - DefaultReaderOptions, fallback csv reader options (optional)
-- CsvReadSize, csv reader read chunk size (default: 5000)
+- ReaderReadSize, csv reader read chunk size (default: 5000)
 - UpdateIntervalInMinutes, update timer interval in minutes (default: 5)
 - RetryIntervalInMinutes, fallback update task retry interval in minutes (default: 60)
 - Files, array of csv file option objects

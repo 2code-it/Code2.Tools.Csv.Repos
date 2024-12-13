@@ -63,7 +63,7 @@ public static class DependencyInjection
 	private static void CopyOptionsTo(CsvReposOptions source, CsvReposOptions destination, IReflectionUtility reflectionUtility)
 	{
 		destination.UpdateIntervalInMinutes = source.UpdateIntervalInMinutes;
-		destination.CsvReadSize = source.CsvReadSize;
+		destination.ReaderReadSize = source.ReaderReadSize;
 		if (source.DefaultReaderOptions is not null) destination.DefaultReaderOptions = reflectionUtility.GetShallowCopy(source.DefaultReaderOptions);
 		if (source.Files is not null) destination.Files = source.Files.Select(reflectionUtility.GetShallowCopy).ToArray();
 		if (source.UpdateTasks is not null) destination.UpdateTasks = source.UpdateTasks.Select(reflectionUtility.GetShallowCopy).ToArray();

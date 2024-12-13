@@ -1,4 +1,7 @@
-﻿namespace Code2.Tools.Csv.Repos;
+﻿using Microsoft.Extensions.DependencyInjection;
+using System;
+
+namespace Code2.Tools.Csv.Repos;
 public class CsvReposOptions
 {
 	public CsvReaderOptions? DefaultReaderOptions { get; set; }
