@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
@@ -24,14 +23,14 @@ internal class HttpUtility : IHttpUtility
 		return await httpClient.GetByteArrayAsync(url);
 	}
 
-	public async Task<Dictionary<string, string>> GetHeadersOnly(string url, Dictionary<string, string>? requestHeaders = null)
+	public async Task<Dictionary<string, string>> GetHeadersOnlyAsync(string url, Dictionary<string, string>? requestHeaders = null)
 	{
 		using var httpClient = GetHttpClient(requestHeaders);
 
 		var requestMessage = new HttpRequestMessage(HttpMethod.Head, url);
 		var response = await httpClient.SendAsync(requestMessage);
 		if (!response.IsSuccessStatusCode) throw new InvalidOperationException($"Response error {response.StatusCode}, {response.ReasonPhrase}");
-		return response.Content.Headers.ToDictionary(x => x.Key, x => string.Join(";", x.Value));
+		return response.Content.Headers.ToDictionary(x => x.Key, x => string.Join(";", x.Value), StringComparer.InvariantCultureIgnoreCase);
 	}
 
 	private HttpClient GetHttpClient(Dictionary<string, string>? requestHeaders = null)
