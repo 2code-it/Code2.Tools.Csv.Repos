@@ -17,7 +17,7 @@ public class DepencyInjectionTests
 		List<Type> serviceTypes = new();
 		services.When(x => x.Add(Arg.Any<ServiceDescriptor>())).Do(x => serviceTypes.Add(x.Arg<ServiceDescriptor>().ServiceType));
 
-		services.AddCsvRepos(x => x.Files = new[] { new CsvFileOptions { TypeName = nameof(TestItem) } });
+		services.AddCsvRepos(x => x.Files = new[] { new CsvFileOptions { ItemTypeName = nameof(TestItem) } });
 
 		Assert.IsTrue(serviceTypes.Contains(typeof(ICsvRepository<TestItem>)));
 	}
@@ -29,10 +29,9 @@ public class DepencyInjectionTests
 		List<Type> serviceTypes = new();
 		services.When(x => x.Add(Arg.Any<ServiceDescriptor>())).Do(x => serviceTypes.Add(x.Arg<ServiceDescriptor>().ServiceType));
 
-		services.AddCsvRepos();
+		services.AddCsvRepos(x=> x.ReaderReadSize = 1000);
 
 		Assert.IsTrue(serviceTypes.Contains(typeof(ICsvReposManager)));
-		Assert.IsTrue(serviceTypes.Contains(typeof(ICsvReaderFactory)));
 	}
 
 
@@ -47,7 +46,7 @@ public class DepencyInjectionTests
 
 		serviceProvider.UseCsvRepos(updateOnStart, loadOnStart);
 
-		reposManager.Received(1).Configure(Arg.Any<CsvReposOptions>(), Arg.Any<IServiceProvider?>());
+		reposManager.Received(1).Configure(Arg.Any<Action<CsvReposOptions>>());
 		if (updateOnStart) reposManager.Received(1).UpdateAsync();
 		if (loadOnStart) reposManager.Received(1).LoadAsync();
 	}

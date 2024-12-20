@@ -33,9 +33,6 @@ public class HttpUpdateTask : ICsvUpdateTask
 
 	public async Task<IResult> RunAsync(CancellationToken cancellationToken = default)
 	{
-		if (Url is null) return Result.Error($"{nameof(Url)} is not defined");
-		if (FilePath is null) return Result.Error($"{nameof(FilePath)} is not defined");
-
 		await _semaphore.WaitAsync(cancellationToken);
 		if (cancellationToken.IsCancellationRequested) return Result.Cancel();
 
@@ -44,18 +41,20 @@ public class HttpUpdateTask : ICsvUpdateTask
 		{
 			IsRunning = true;
 			result = OnBeforeRun();
-			if (result is null || result.IsSuccess)
+			if (result is not null && !result.IsSuccess) return result;
+
+			if (Url is null) return Result.Error($"{nameof(Url)} is not defined");
+			if (FilePath is null) return Result.Error($"{nameof(FilePath)} is not defined");
+
+			string filePath = PathGetFullPath(FilePath);
+			if (FileExists(filePath)) FileDelete(filePath);
+			using (Stream fileStream = FileCreate(filePath))
 			{
-				string filePath = PathGetFullPath(FilePath);
-				if (FileExists(filePath)) FileDelete(filePath);
-				using (Stream fileStream = FileCreate(filePath))
-				{
-					await DownloadFileToAsync(Url, fileStream, RequestHeaders);
-					await fileStream.FlushAsync(cancellationToken);
-					fileStream.Close();
-				}
-				OnAfterRun();
+				await DownloadFileToAsync(Url, fileStream, RequestHeaders);
+				await fileStream.FlushAsync(cancellationToken);
+				fileStream.Close();
 			}
+			result = OnAfterRun();
 		}
 		catch (Exception ex)
 		{
@@ -72,39 +71,39 @@ public class HttpUpdateTask : ICsvUpdateTask
 	protected virtual IResult? OnBeforeRun() { return null; }
 	protected virtual IResult? OnAfterRun() { return null; }
 
-	protected async Task DownloadFileToAsync(string url, Stream fileStream, Dictionary<string, string>? headers = null)
+	protected virtual async Task DownloadFileToAsync(string url, Stream fileStream, Dictionary<string, string>? headers = null)
 		=> await _httpUtility.DownloadFileToAsync(url, fileStream, headers);
 
-	protected async Task<byte[]> GetByteArrayAsync(string url, Dictionary<string, string>? headers = null)
+	protected virtual async Task<byte[]> GetByteArrayAsync(string url, Dictionary<string, string>? headers = null)
 		=> await _httpUtility.GetByteArrayAsync(url, headers);
 
-	protected async Task<Dictionary<string, string>> GetHeadersOnly(string url, Dictionary<string, string>? requestHeaders = null)
-		=> await _httpUtility.GetHeadersOnly(url, requestHeaders);
+	protected virtual async Task<Dictionary<string, string>> GetHeadersOnlyAsync(string url, Dictionary<string, string>? requestHeaders = null)
+		=> await _httpUtility.GetHeadersOnlyAsync(url, requestHeaders);
 
-	protected string PathGetFullPath(string filePath)
+	protected virtual string PathGetFullPath(string filePath)
 		=> _fileSystem.PathGetFullPath(filePath);
 
-	protected string PathCombine(params string[] paths)
+	protected virtual string PathCombine(params string[] paths)
 		=> _fileSystem.PathCombine(paths);
 
-	protected bool FileExists(string filePath)
+	protected virtual bool FileExists(string filePath)
 		=> _fileSystem.FileExists(filePath);
 
-	protected void FileDelete(string filePath)
+	protected virtual void FileDelete(string filePath)
 		=> _fileSystem.FileDelete(filePath);
 
-	protected Stream FileCreate(string filePath)
+	protected virtual Stream FileCreate(string filePath)
 		=> _fileSystem.FileCreate(filePath);
 
-	protected void FileWriteAllBytes(string filePath, byte[] contents)
+	protected virtual void FileWriteAllBytes(string filePath, byte[] contents)
 		=> _fileSystem.FileWriteAllBytes(filePath, contents);
 
-	protected DateTime FileLastWriteTime(string filePath)
+	protected virtual DateTime FileLastWriteTime(string filePath)
 		=> _fileSystem.FileGetLastWriteTime(filePath);
 
-	protected void DirectoryCreate(string path)
+	protected virtual void DirectoryCreate(string path)
 		=> _fileSystem.DirectoryCreate(path);
 
-	protected bool DirectoryExists(string path)
+	protected virtual bool DirectoryExists(string path)
 		=> _fileSystem.DirectoryExists(path);
 }

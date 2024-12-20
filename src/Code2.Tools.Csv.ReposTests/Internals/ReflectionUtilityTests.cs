@@ -12,7 +12,7 @@ namespace Code2.Tools.Csv.ReposTests.Internals;
 public class ReflectionUtilityTests
 {
 	[TestMethod]
-	public void GetRequiredType_When_TypeExists_Expect_NoException()
+	public void GetRequiredClassType_When_TypeExists_Expect_NoException()
 	{
 		ReflectionUtility reflectionUtility = new();
 
@@ -20,8 +20,16 @@ public class ReflectionUtilityTests
 	}
 
 	[TestMethod]
+	public void GetRequiredClassType_When_TypeNameIncludesNamespace_Expect_NamespaceInSelection()
+	{
+		ReflectionUtility reflectionUtility = new();
+
+		reflectionUtility.GetRequiredClassType(typeof(TestItem).FullName!);
+	}
+
+	[TestMethod]
 	[ExpectedException(typeof(InvalidOperationException))]
-	public void GetRequiredType_When_TypeNotExists_Expect_Exception()
+	public void GetRequiredClassType_When_TypeNotExists_Expect_Exception()
 	{
 		ReflectionUtility reflectionUtility = new();
 
@@ -127,88 +135,26 @@ public class ReflectionUtilityTests
 	}
 
 	[TestMethod]
-	[DataRow(typeof(TestRepository), null, typeof(ICsvRepository<TestItem>))]
-	[DataRow(null, typeof(TestItem), typeof(ICsvRepository<TestItem>))]
-	[DataRow(typeof(TestRepositoryFail), null, null)]
-	[DataRow(null, typeof(TestItemFail), typeof(ICsvRepository<TestItemFail>))]
-	public void GetRepositoryInterfaceType_When_UsingInstanceOrTypeName_Expect_ExpectedInterfaceType(Type? repoType, Type? itemType, Type expectedInterfaceType)
+	public void GetGenericInterface_When_TypeImplementsGenericInterface_Expect_ExpectInterfaceType()
 	{
 		ReflectionUtility reflectionUtility = new ReflectionUtility();
-		object? instance = repoType is null ? null : Activator.CreateInstance(repoType);
+		Type source = typeof(TestRepository);
+		Type expectedGeneric = typeof(ICsvRepository<TestItem>);
 
-		Type? interfaceType = null;
-		try
-		{
-			interfaceType = reflectionUtility.GetRepositoryInterfaceType(instance, itemType);
-		}
-		catch
-		{
-		}
-
-		Assert.AreEqual(expectedInterfaceType, interfaceType);
+		var result = reflectionUtility.GetGenericInterface(source, typeof(ICsvRepository<>));
+		
+		Assert.AreEqual(expectedGeneric, result);
 	}
 
 	[TestMethod]
-	[ExpectedException(typeof(InvalidOperationException))]
-	public void GetRepositoryInterfaceType_When_InstanceDoesntImplementIRepository_Expect_Exception()
+	public void GetGenericInterface_When_TypeNotImplementsGenericInterface_Expect_ExpectNull()
 	{
 		ReflectionUtility reflectionUtility = new ReflectionUtility();
-		object instance = new TestRepositoryFail();
+		Type source = typeof(TestRepositoryFail);
 
-		Type interfaceType = reflectionUtility.GetRepositoryInterfaceType(instance, null);
+		var result = reflectionUtility.GetGenericInterface(source, typeof(ICsvRepository<>));
 
-		Assert.AreEqual(typeof(ICsvRepository<TestItem>), interfaceType);
-	}
-
-	[TestMethod]
-	[DataRow(typeof(TestRepository), null, typeof(TestRepository))]
-	[DataRow(null, typeof(TestItem), typeof(TestRepository))]
-	[DataRow(typeof(TestRepositoryFail), null, typeof(TestRepositoryFail))]
-	public void GetRepositoryImplementationType_When_UsingInstanceOrTypeName_Expect_ExpectedInterfaceType(Type? repoType, Type? itemType, Type expectedImplementationType)
-	{
-		ReflectionUtility reflectionUtility = new ReflectionUtility();
-		object? instance = repoType is null ? null : Activator.CreateInstance(repoType);
-
-		Type implementationType = reflectionUtility.GetRepositoryImplementationType(instance, itemType);
-
-		Assert.AreEqual(expectedImplementationType, implementationType);
-	}
-
-	[TestMethod]
-	[ExpectedException(typeof(InvalidOperationException))]
-	public void GetRepositoryImplementationType_When_UsingInvalidTypeName_Expect_Exception()
-	{
-		ReflectionUtility reflectionUtility = new ReflectionUtility();
-		Type itemType = typeof(TestItemFail);
-
-		reflectionUtility.GetRepositoryImplementationType(null, itemType);
-	}
-
-	[TestMethod]
-	[DataRow(typeof(TestRepository), null, typeof(TestRepository))]
-	[DataRow(null, typeof(TestItem), typeof(TestRepository))]
-	[DataRow(typeof(TestRepositoryFail), null, typeof(TestRepositoryFail))]
-	public void GetOrCreateRepository_When_UsingInstanceOrTypeName_Expect_ExpectedInterfaceType(Type? repoType, Type? itemType, Type expectedImplementationType)
-	{
-		ReflectionUtility reflectionUtility = new ReflectionUtility();
-		object? instance = repoType is null ? null : Activator.CreateInstance(repoType);
-
-		object? repoInstance = reflectionUtility.GetOrCreateRepository(instance, itemType);
-
-		Assert.IsNotNull(repoInstance);
-		Assert.AreEqual(repoInstance.GetType(), expectedImplementationType);
-	}
-
-	[TestMethod]
-	public void GetOrCreateRepository_When_UsingServiceProvider_Expect_ServiceProviderGetServiceCall()
-	{
-		ReflectionUtility reflectionUtility = new ReflectionUtility();
-		IServiceProvider serviceProvider = Substitute.For<IServiceProvider>();
-		serviceProvider.GetService(typeof(ICsvRepository<TestItem>)).Returns(new TestRepository());
-
-		object? repoInstance = reflectionUtility.GetOrCreateRepository(null, typeof(TestItem), serviceProvider);
-
-		serviceProvider.Received(1).GetService(Arg.Any<Type>());
+		Assert.IsNull(result);
 	}
 
 	private class TestWithArray<T>

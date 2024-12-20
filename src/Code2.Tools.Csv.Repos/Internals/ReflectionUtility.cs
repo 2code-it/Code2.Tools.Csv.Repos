@@ -20,7 +20,8 @@ internal class ReflectionUtility : IReflectionUtility
 
 	public Type GetRequiredClassType(string classTypeName)
 	{
-		return _nonFrameworkClasses.FirstOrDefault(x => x.Name == classTypeName) ?? throw new InvalidOperationException($"Required type '{classTypeName}' not found");
+		return _nonFrameworkClasses.FirstOrDefault(x => x.FullName == classTypeName || x.Name == classTypeName)
+			?? throw new InvalidOperationException($"Required type '{classTypeName}' not found");
 	}
 
 	public Type[] GetClasses(Func<Type, bool>? filter)
@@ -29,7 +30,7 @@ internal class ReflectionUtility : IReflectionUtility
 	public Type? GetGenericInterface(Type source, Type genericTypeDefinition)
 		=> source.GetInterfaces().Where(x => x.IsGenericType && x.GetGenericTypeDefinition() == genericTypeDefinition).FirstOrDefault();
 
-	public object? InvokePrivateGenericMethod(object instance, string methodName, Type genericArgumentType, object[] parameters)
+	public object? InvokePrivateGenericMethod(object instance, string methodName, Type genericArgumentType, object?[] parameters)
 	{
 		MethodInfo? methodInfo = instance.GetType().GetMethod(methodName, BindingFlags.Instance | BindingFlags.NonPublic);
 		if (methodInfo is null) throw new InvalidOperationException($"Method '{methodName}' not found");
@@ -77,8 +78,7 @@ internal class ReflectionUtility : IReflectionUtility
 		var properties = type.GetProperties().Where(x => x.CanWrite && IsValueTypeOrString(x.PropertyType)).ToArray();
 		foreach (var property in properties)
 		{
-			string? value;
-			if (!propertyValues.TryGetValue(property.Name, out value)) continue;
+			if (!propertyValues.TryGetValue(property.Name, out var value)) continue;
 			try
 			{
 				property.SetValue(source, Convert.ChangeType(value, property.PropertyType));
@@ -90,45 +90,9 @@ internal class ReflectionUtility : IReflectionUtility
 		}
 	}
 
-	public object? GetOrCreateRepository(object? repoInstance, Type? itemType, IServiceProvider? serviceProvider = null)
-	{
-		if (repoInstance is not null) return repoInstance;
-		if (itemType is not null)
-		{
-			Type repoInterfaceType = GetRepositoryInterfaceType(repoInstance, itemType);
-			var repo = serviceProvider?.GetService(repoInterfaceType);
-			if (repo is null)
-			{
-				Type repoImplementationType = GetRepositoryImplementationType(null, itemType);
-				repo = ActivatorCreateInstance(repoImplementationType, serviceProvider);
-			}
-			return repo;
-		}
-		return null;
-	}
+	public Type TypeMakeGeneric(Type genericType, params Type[] typeArguments)
+		=> genericType.MakeGenericType(typeArguments);
 
-	public Type GetRepositoryImplementationType(object? repoInstance, Type? itemType)
-	{
-		if (repoInstance is not null) return repoInstance.GetType();
-		Type repoInterfaceType = GetRepositoryInterfaceType(repoInstance, itemType);
-		return GetClasses(x => !x.IsGenericType && repoInterfaceType.IsAssignableFrom(x)).FirstOrDefault()
-				?? throw new InvalidOperationException($"Implementation for {repoInterfaceType} not found");
-	}
-
-	public Type GetRepositoryInterfaceType(object? repoInstance, Type? itemType)
-	{
-		if (repoInstance is not null)
-		{
-			return GetGenericInterface(repoInstance.GetType(), typeof(ICsvRepository<>))
-				?? throw new InvalidOperationException($"{repoInstance.GetType().Name} does not implement {typeof(ICsvRepository<>).Name}");
-		}
-		if (itemType is not null)
-		{
-			return typeof(ICsvRepository<>).MakeGenericType(itemType);
-		}
-
-		throw new InvalidOperationException($"Interface can not be determined, {nameof(CsvFileOptions.TypeName)} and {nameof(CsvFileOptions.Repository)} not defined");
-	}
 
 	internal static bool IsValueTypeOrString(Type type)
 	{

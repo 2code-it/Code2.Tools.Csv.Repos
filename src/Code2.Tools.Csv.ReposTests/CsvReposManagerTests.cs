@@ -1,6 +1,7 @@
 ﻿using Code2.Tools.Csv.Repos;
 using Code2.Tools.Csv.Repos.Internals;
 using Code2.Tools.Csv.ReposTests.Assets;
+using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using System;
 using System.Threading.Tasks;
@@ -24,45 +25,59 @@ public class CsvReposManagerTests
 	}
 
 	[TestMethod]
-	public void Configure_When_FileOptionsSet_Expect_CorrespondingFileCount()
+	public void Configure_When_FileOptionsSet_Expect_ResultWithMandatoryPropertiesSet()
 	{
-		var reposManager = new CsvReposManager(_csvReaderFactory, new ReflectionUtility(), _fileSystem);
-		var options = new CsvReposOptions { Files = new[] { new CsvFileOptions { TypeName = nameof(TestItem) } } };
+		var reposManager = new CsvReposManager(_csvReaderFactory, _reflectionUtility, _fileSystem);
+		Type repoType = typeof(TestRepository);
+		Type repoInterfaceType = typeof(ICsvRepository<TestItem>);
+		_reflectionUtility.GetShallowCopy(Arg.Any<CsvFileOptions>()).Returns(x => x.Arg<CsvFileOptions>());
+		_reflectionUtility.TypeMakeGeneric(typeof(ICsvRepository<>), typeof(TestItem)).Returns(x => repoInterfaceType);
+		_reflectionUtility.GetClasses(Arg.Any<Func<Type, bool>>()).Returns(new[] { repoType });
+		var options = new CsvReposOptions { Files = new[] { new CsvFileOptions { ItemType = typeof(TestItem) } } };
 
 		reposManager.Configure(options);
 
+		_reflectionUtility.Received(1).TypeMakeGeneric(typeof(ICsvRepository<>), typeof(TestItem));
 		Assert.AreEqual(1, reposManager.Files.Length);
+		Assert.AreEqual(repoType, reposManager.Files[0].RepositoryType);
 	}
 
 	[TestMethod]
-	public void Configure_When_FileOptionsSet_Expect_CorrespondingFileInfo()
+	public void Configure_When_FileOptionsSetWithServiceCollection_Expect_RepositoriesAddedToCollectionCorrectly()
 	{
-		string expectedFullFilePath = "/test.csv";
-		Type expectedItemType = typeof(TestItem);
-		var reposManager = new CsvReposManager(_csvReaderFactory, new ReflectionUtility(), _fileSystem);
-		CsvFileOptions fileOptions = new();
-		_fileSystem.PathGetFullPath(Arg.Any<string>()).Returns(expectedFullFilePath);
-		fileOptions.FilePath = "./test.csv";
-		fileOptions.ReaderOptions = new CsvReaderOptions { Explicit = true };
-		fileOptions.TypeName = nameof(TestItem);
-		var options = new CsvReposOptions { Files = new[] { fileOptions } };
+		IServiceCollection services = Substitute.For<IServiceCollection>();
+		var reposManager = new CsvReposManager(_csvReaderFactory, _reflectionUtility, _fileSystem);
+		Type repoType = typeof(TestRepository);
+		Type repoInterfaceType = typeof(ICsvRepository<TestItem>);
+		_reflectionUtility.GetRequiredClassType(Arg.Any<string>()).Returns(typeof(TestItem));
+		_reflectionUtility.GetShallowCopy(Arg.Any<CsvFileOptions>()).Returns(x => x.Arg<CsvFileOptions>());
+		_reflectionUtility.TypeMakeGeneric(typeof(ICsvRepository<>), typeof(TestItem)).Returns(x => repoInterfaceType);
+		_reflectionUtility.GetClasses(Arg.Any<Func<Type, bool>>()).Returns(new[] { repoType });
+		var options = new CsvReposOptions 
+		{ 
+			ServiceCollection = services,
+			Files = new[] { new CsvFileOptions { ItemTypeName = nameof(TestItem), IsTransientRepository = true } } 
+		};
+		ServiceDescriptor? serviceDescriptor = null;
+		services.When(x => x.Add(Arg.Any<ServiceDescriptor>())).Do(x => serviceDescriptor = x.Arg<ServiceDescriptor>());
+
 		reposManager.Configure(options);
 
-		CsvFileInfo fileInfo = reposManager.Files[0];
-
-		Assert.AreEqual(typeof(TestRepository).Name, fileInfo.Repository.GetType().Name);
-		Assert.AreEqual(fileOptions.ReaderOptions.Explicit, fileInfo.CsvReaderOptions!.Explicit);
-		Assert.AreEqual(expectedFullFilePath, fileInfo.FullFilePath);
-		Assert.AreEqual(expectedItemType, fileInfo.ItemType);
+		services.Received(1).Add(Arg.Any<ServiceDescriptor>());
+		Assert.AreEqual(1, reposManager.Files.Length);
+		Assert.IsNotNull(serviceDescriptor);
+		Assert.AreEqual(ServiceLifetime.Transient, serviceDescriptor.Lifetime);
 	}
 
 	[TestMethod]
 	public void Configure_When_UpdateTasksOptionsSet_Expect_CorrespondingUpdateTaskCount()
 	{
+		IServiceProvider serviceProvider = Substitute.For<IServiceProvider>();
 		var reposManager = new CsvReposManager(_csvReaderFactory, _reflectionUtility, _fileSystem);
 		_reflectionUtility.GetRequiredClassType(Arg.Any<string>()).Returns(typeof(TestUpdateTask));
 		_reflectionUtility.ActivatorCreateInstance(Arg.Any<Type>(), Arg.Any<IServiceProvider>()).Returns(new TestUpdateTask());
-		var options = new CsvReposOptions { UpdateTasks = new[] { new CsvUpdateTaskOptions { TaskTypeName = nameof(TestUpdateTask) } } };
+		_reflectionUtility.GetShallowCopy(Arg.Any<CsvUpdateTaskOptions>()).Returns(x => x.Arg<CsvUpdateTaskOptions>());
+		var options = new CsvReposOptions { ServiceProvider= serviceProvider, UpdateTasks = new[] { new CsvUpdateTaskOptions { TaskTypeName = nameof(TestUpdateTask) } } };
 
 		reposManager.Configure(options);
 
@@ -72,6 +87,7 @@ public class CsvReposManagerTests
 	[TestMethod]
 	public void Configure_When_UpdateTasksOptionsSet_Expect_CorrespondingUpdateTask()
 	{
+		var serviceProvider = Substitute.For<IServiceProvider>();
 		var reposManager = new CsvReposManager(_csvReaderFactory, new ReflectionUtility(), _fileSystem);
 		CsvUpdateTaskOptions taskOptions = new();
 		taskOptions.TaskTypeName = nameof(TestUpdateTask);
@@ -79,9 +95,9 @@ public class CsvReposManagerTests
 		taskOptions.IntervalInMinutes = 25;
 		taskOptions.IsDisabled = true;
 		taskOptions.Properties = new() { { "ThrowsError", "false" }, { "FilePath", "./test.csv" } };
-		var options = new CsvReposOptions { UpdateTasks = new[] { taskOptions } };
-		reposManager.Configure(options);
+		var options = new CsvReposOptions { UpdateTasks = new[] { taskOptions }, ServiceProvider = serviceProvider };
 
+		reposManager.Configure(options);
 		TestUpdateTask updateTask = (TestUpdateTask)reposManager.UpdateTasks[0];
 
 		Assert.AreEqual(typeof(TestItem), updateTask.AffectedTypes![0]);
@@ -95,10 +111,16 @@ public class CsvReposManagerTests
 	[ExpectedException(typeof(InvalidOperationException))]
 	public async Task UpdateAsync_When_UpdateTaskStateIsErrorAndUpdateTaskErrorNotSet_Expect_Exception()
 	{
+		var serviceProvider = Substitute.For<IServiceProvider>();
 		var reposManager = new CsvReposManager(_csvReaderFactory, _reflectionUtility, _fileSystem);
 		_reflectionUtility.GetRequiredClassType(Arg.Any<string>()).Returns(typeof(TestUpdateTask));
-		_reflectionUtility.ActivatorCreateInstance(Arg.Any<Type>(), Arg.Any<IServiceProvider>()).Returns(new TestUpdateTask(true));
-		var options = new CsvReposOptions { UpdateTasks = new[] { new CsvUpdateTaskOptions { TaskTypeName = "TestUpdateTask" } } };
+		_reflectionUtility.ActivatorCreateInstance(Arg.Any<Type>(), Arg.Any<IServiceProvider>()).Returns(new TestUpdateTask() { ThrowsError = true });
+		_reflectionUtility.GetShallowCopy(Arg.Any<CsvUpdateTaskOptions>()).Returns(x => x.Arg<CsvUpdateTaskOptions>());
+		var options = new CsvReposOptions 
+		{
+			ServiceProvider = serviceProvider,
+			UpdateTasks = new[] { new CsvUpdateTaskOptions { TaskTypeName = "TestUpdateTask" } } 
+		};
 
 		reposManager.Configure(options);
 		await reposManager.UpdateAsync();
@@ -107,11 +129,17 @@ public class CsvReposManagerTests
 	[TestMethod]
 	public async Task UpdateAsync_When_UpdateTaskStateIsErrorAndUpdateTaskErrorSet_Expect_ExceptionHandled()
 	{
+		var serviceProvider = Substitute.For<IServiceProvider>();
 		var reposManager = new CsvReposManager(_csvReaderFactory, _reflectionUtility, _fileSystem);
-		reposManager.UpdateTaskError = (e) => { };
+		reposManager.UpdateTaskError += (s, e) => { };
 		_reflectionUtility.GetRequiredClassType(Arg.Any<string>()).Returns(typeof(TestUpdateTask));
-		_reflectionUtility.ActivatorCreateInstance(Arg.Any<Type>(), Arg.Any<IServiceProvider>()).Returns(new TestUpdateTask(true));
-		var options = new CsvReposOptions { UpdateTasks = new[] { new CsvUpdateTaskOptions { TaskTypeName = "TestUpdateTask" } } };
+		_reflectionUtility.ActivatorCreateInstance(Arg.Any<Type>(), Arg.Any<IServiceProvider>()).Returns(new TestUpdateTask() { ThrowsError = true });
+		_reflectionUtility.GetShallowCopy(Arg.Any<CsvUpdateTaskOptions>()).Returns(x => x.Arg<CsvUpdateTaskOptions>());
+		var options = new CsvReposOptions 
+		{
+			ServiceProvider = serviceProvider,
+			UpdateTasks = new[] { new CsvUpdateTaskOptions { TaskTypeName = "TestUpdateTask" } } 
+		};
 
 		reposManager.Configure(options);
 		await reposManager.UpdateAsync();
@@ -120,12 +148,19 @@ public class CsvReposManagerTests
 	[TestMethod]
 	public async Task UpdateAsync_When_UpdateTaskResultIsNotSuccess_Expect_TaskRunAfterIncrementByRetryInterval()
 	{
+		var serviceProvider = Substitute.For<IServiceProvider>();
 		int retryInterval = 10;
 		var reposManager = new CsvReposManager(_csvReaderFactory, _reflectionUtility, _fileSystem);
-		reposManager.UpdateTaskError = (e) => { };
+		reposManager.UpdateTaskError += (s,e) => { };
 		_reflectionUtility.GetRequiredClassType(Arg.Any<string>()).Returns(typeof(TestUpdateTask));
-		_reflectionUtility.ActivatorCreateInstance(Arg.Any<Type>(), Arg.Any<IServiceProvider>()).Returns(new TestUpdateTask(true));
-		var options = new CsvReposOptions { RetryIntervalInMinutes = retryInterval, UpdateTasks = new[] { new CsvUpdateTaskOptions { TaskTypeName = "TestUpdateTask" } } };
+		_reflectionUtility.ActivatorCreateInstance(Arg.Any<Type>(), Arg.Any<IServiceProvider>()).Returns(new TestUpdateTask() { ThrowsError = true });
+		_reflectionUtility.GetShallowCopy(Arg.Any<CsvUpdateTaskOptions>()).Returns(x => x.Arg<CsvUpdateTaskOptions>());
+		var options = new CsvReposOptions 
+		{ 
+			ServiceProvider = serviceProvider,
+			RetryIntervalInMinutes = retryInterval, 
+			UpdateTasks = new[] { new CsvUpdateTaskOptions { TaskTypeName = "TestUpdateTask" } } 
+		};
 		var minRetryTime = DateTime.Now.AddMinutes(retryInterval);
 
 		reposManager.Configure(options);

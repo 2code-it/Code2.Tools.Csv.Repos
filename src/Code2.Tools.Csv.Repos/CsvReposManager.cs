@@ -1,4 +1,5 @@
 ﻿using Code2.Tools.Csv.Repos.Internals;
+using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.Linq;
 using System.Threading;
@@ -26,25 +27,30 @@ public class CsvReposManager : ICsvReposManager
 	private int _retryIntervalInMinutes = 60;
 	private int _readerReadSize = 5000;
 	private Timer? _updateTimer;
+	private IServiceProvider? _serviceProvider;
+	private CsvUpdateTaskOptions[]? _updateTaskOptions;
 
-	public CsvFileInfo[] Files { get; private set; } = Array.Empty<CsvFileInfo>();
+	public ICsvFileInfo[] Files { get; private set; } = Array.Empty<ICsvFileInfo>();
 	public ICsvUpdateTask[] UpdateTasks { get; private set; } = Array.Empty<ICsvUpdateTask>();
 	public bool IsAutoUpdating => _updateTimer is not null;
-	public Action<IResult>? UpdateTaskError { get; set; }
+	public event EventHandler<ResultEventArgs>? UpdateTaskError;
+	public event EventHandler<UnhandledExceptionEventArgs>? ReaderError;
+	public event EventHandler<DataLoadedEventArgs>? DataLoaded;
 
 	public async Task LoadAsync(Type[]? targetItemTypes = null, CancellationToken cancellationToken = default)
 	{
+		if (_serviceProvider is null) throw new InvalidOperationException("Service provider not configured");
 		if (Files.Length == 0) return;
 
 		await Task.Run(() =>
 		{
-			var filesToLoad = Files.Where(x => targetItemTypes is null || targetItemTypes.Contains(x.ItemType)).OrderBy(x => x.ItemType).ToArray();
-			Type? previousType = null;
+			var filesToLoad = Files.Where(x => targetItemTypes is null || targetItemTypes.Contains(x.ItemType)).OrderBy(x => x.ItemType!.Name).ToArray();
+			string? previousTypeName = null;
 			foreach (var fileInfo in filesToLoad)
 			{
-				bool clearRepository = previousType is null || fileInfo.ItemType != previousType;
-				_reflectionUtility.InvokePrivateGenericMethod(this, nameof(LoadRepository), fileInfo.ItemType, new object[] { fileInfo.FullFilePath, fileInfo.Repository, clearRepository, fileInfo.CsvReaderOptions! });
-				previousType = fileInfo.ItemType;
+				bool clearRepository = previousTypeName is null || fileInfo.ItemType!.Name != previousTypeName;
+				_reflectionUtility.InvokePrivateGenericMethod(this, nameof(LoadRepository), fileInfo.ItemType!, new object?[] { fileInfo.FilePath, clearRepository, fileInfo.ReaderOptions ?? _defaultReaderOptions });
+				previousTypeName = fileInfo.ItemType!.Name;
 			}
 		}, cancellationToken);
 	}
@@ -72,31 +78,65 @@ public class CsvReposManager : ICsvReposManager
 		}
 	}
 
-	public void Configure(Action<CsvReposOptions> config, IServiceProvider? serviceProvider = null)
+	public void Configure(Action<CsvReposOptions> config)
 	{
 		var options = new CsvReposOptions();
 		config(options);
-		Configure(options, serviceProvider);
+		Configure(options);
 	}
 
-	public void Configure(CsvReposOptions options, IServiceProvider? serviceProvider = null)
+	public void Configure(CsvReposOptions options)
 	{
 		if (options.UpdateIntervalInMinutes.HasValue) _updateIntervalInMinutes = options.UpdateIntervalInMinutes.Value;
 		if (options.RetryIntervalInMinutes.HasValue) _retryIntervalInMinutes = options.RetryIntervalInMinutes.Value;
 		if (options.ReaderReadSize is not null) _readerReadSize = options.ReaderReadSize.Value;
 		if (options.DefaultReaderOptions is not null) _defaultReaderOptions = _reflectionUtility.GetShallowCopy(options.DefaultReaderOptions);
-		if (options.Files is not null) Files = options.Files.Select(x => CreateCsvFileInfo(x, serviceProvider)).ToArray();
-		if (options.UpdateTasks is not null) UpdateTasks = options.UpdateTasks.Select(x => CreateUpdateTask(x, serviceProvider)).ToArray();
+		if (options.Files is not null) Files = options.Files.Select(GetCopyWithResolvedTypes).ToArray();
+		if (options.UpdateTasks is not null) _updateTaskOptions = options.UpdateTasks.Select(CopyUpdateTaskOptions).ToArray();
+		if (options.ServiceProvider is not null) _serviceProvider = options.ServiceProvider;
+		if (options.OnUpdateTaskError is not null) UpdateTaskError += (_, e) => options.OnUpdateTaskError(e);
+		if (options.OnReaderError is not null) ReaderError += (_, e) => options.OnReaderError(e);
+		if (options.OnDataLoaded is not null) DataLoaded += (_, e) => options.OnDataLoaded(e);
 
-		if (_updateIntervalInMinutes > 0 && UpdateTasks.Length > 0)
+		if (options.ServiceCollection is not null) AddFileRepositoriesToServiceCollection(options.ServiceCollection, Files);
+		if (_serviceProvider is not null && _updateTaskOptions is not null) UpdateTasks = _updateTaskOptions.Select(CreateUpdateTask).ToArray();
+
+		CreateOrDestroyUpdateTimer(_updateIntervalInMinutes);
+	}
+
+	private CsvUpdateTaskOptions CopyUpdateTaskOptions(CsvUpdateTaskOptions options)
+	{
+		var newOptions = _reflectionUtility.GetShallowCopy(options);
+		if (options.Properties is not null) newOptions.Properties = options.Properties.ToDictionary(x => x.Key, x => x.Value);
+		return newOptions;
+	}
+
+	private void AddFileRepositoriesToServiceCollection(IServiceCollection services, ICsvFileInfo[] files)
+	{
+		foreach (var fileInfo in files)
+		{
+			Type repoInterfaceType = _reflectionUtility.TypeMakeGeneric(typeof(ICsvRepository<>), fileInfo.ItemType!);
+
+			if (fileInfo.IsTransientRepository)
+			{
+				services.AddTransient(repoInterfaceType, fileInfo.RepositoryType!);
+			}
+			else
+			{
+				services.AddSingleton(repoInterfaceType, fileInfo.RepositoryType!);
+			}
+		}
+	}
+
+	private void CreateOrDestroyUpdateTimer(int updateIntervalInMinutes)
+	{
+		_updateTimer?.Dispose();
+		_updateTimer = null;
+		if (updateIntervalInMinutes > 0)
 		{
 			int intervalInSeconds = _updateIntervalInMinutes * 60;
 			int dueTimeMs = 1000 * (intervalInSeconds - (((int)DateTime.Now.TimeOfDay.TotalSeconds) % intervalInSeconds));
 			_updateTimer = new Timer(new TimerCallback(OnUpdateTimer), null, dueTimeMs, intervalInSeconds * 1000);
-		}
-		else
-		{
-			_updateTimer?.Dispose();
 		}
 	}
 
@@ -112,25 +152,36 @@ public class CsvReposManager : ICsvReposManager
 		}
 	}
 
-	private CsvFileInfo CreateCsvFileInfo(CsvFileOptions fileOptions, IServiceProvider? serviceProvider = null)
+	private CsvFileOptions GetCopyWithResolvedTypes(CsvFileOptions fileOptions)
 	{
-		Type? itemType = fileOptions.TypeName is null? fileOptions.Type: _reflectionUtility.GetRequiredClassType(fileOptions.TypeName);
-		Type repoInterfaceType = _reflectionUtility.GetRepositoryInterfaceType(fileOptions.Repository, itemType);
-		object? repo = _reflectionUtility.GetOrCreateRepository(fileOptions.Repository, itemType, serviceProvider);
+		var options = _reflectionUtility.GetShallowCopy(fileOptions);
+		if (fileOptions.ReaderOptions is not null) options.ReaderOptions = _reflectionUtility.GetShallowCopy(fileOptions.ReaderOptions);
 
-		string fullFilePath = _fileSystem.PathGetFullPath(fileOptions.FilePath);
-		var readerOptions = fileOptions.ReaderOptions ?? _defaultReaderOptions;
-		if (readerOptions is not null) readerOptions = _reflectionUtility.GetShallowCopy(readerOptions);
+		if (options.RepositoryType is null && options.RepositoryTypeName is not null) options.RepositoryType = _reflectionUtility.GetRequiredClassType(options.RepositoryTypeName);
+		if (options.ItemType is null && options.ItemTypeName is not null) options.ItemType = _reflectionUtility.GetRequiredClassType(options.ItemTypeName);
+		if (options.RepositoryType is null && options.ItemType is null) throw new InvalidOperationException($"Can't determine repository for file {options.FilePath}");
 
-		return new CsvFileInfo(fullFilePath, repo!, repoInterfaceType!.GetGenericArguments()[0], readerOptions);
+		if (options.RepositoryType is null)
+		{
+			var repoInterfaceType = _reflectionUtility.TypeMakeGeneric(typeof(ICsvRepository<>), options.ItemType!);
+			options.RepositoryType = _reflectionUtility.GetClasses(x => !x.IsGenericType && repoInterfaceType.IsAssignableFrom(x)).FirstOrDefault();
+		}
+		else
+		{
+			var repoInterfaceType = _reflectionUtility.GetGenericInterface(options.RepositoryType, typeof(ICsvRepository<>));
+			if (repoInterfaceType is null) throw new InvalidOperationException($"Type {options.RepositoryType.Name} does not implement {typeof(ICsvRepository<>).Name}");
+			options.ItemType = repoInterfaceType.GetGenericArguments()[0];
+		}
+
+		return options;
 	}
 
-	private ICsvUpdateTask CreateUpdateTask(CsvUpdateTaskOptions options, IServiceProvider? serviceProvider = null)
+	private ICsvUpdateTask CreateUpdateTask(CsvUpdateTaskOptions options)
 	{
-		Type? taskType = options.TaskTypeName is null ? options.TaskType: _reflectionUtility.GetRequiredClassType(options.TaskTypeName);
+		Type? taskType = options.TaskTypeName is null ? options.TaskType : _reflectionUtility.GetRequiredClassType(options.TaskTypeName);
 		if (taskType is null) throw new InvalidOperationException("Task type not defined");
 
-		ICsvUpdateTask instance = (ICsvUpdateTask)_reflectionUtility.ActivatorCreateInstance(taskType, serviceProvider);
+		ICsvUpdateTask instance = (ICsvUpdateTask)_reflectionUtility.ActivatorCreateInstance(taskType, _serviceProvider);
 		instance.IsDisabled = options.IsDisabled;
 		instance.IntervalInMinutes = options.IntervalInMinutes;
 		instance.RetryIntervalInMinutes = options.RetryIntervalInMinutes;
@@ -140,22 +191,38 @@ public class CsvReposManager : ICsvReposManager
 		return instance;
 	}
 
-	private void LoadRepository<T>(string fullFilePath, ICsvRepository<T> repository, bool clearRepository, CsvReaderOptions? csvReaderOptions) where T : class, new()
+	private void LoadRepository<T>(string filePath, bool clearRepository, CsvReaderOptions? csvReaderOptions) where T : class, new()
 	{
+		ICsvRepository<T> repository = _serviceProvider?.GetRequiredService<ICsvRepository<T>>() ?? throw new InvalidOperationException($"IRepository<{typeof(T).Name}> not found");
 		if (clearRepository) repository.Clear();
-		using var reader = _csvReaderFactory.Create<T>(fullFilePath, csvReaderOptions);
+		using var reader = _csvReaderFactory.Create<T>(filePath, csvReaderOptions);
+		reader.Error += OnReaderError;
 		while (!reader.EndOfStream)
 		{
-			repository.Add(reader.ReadObjects(_readerReadSize));
+			T[] items = reader.ReadObjects(_readerReadSize);
+			OnDataLoaded(typeof(T), items);
+			repository.Add(items);
 		}
 	}
 
 	private async void OnUpdateTimer(object? state)
 		=> await UpdateAsync();
 
+	private void OnReaderError(object? sender, UnhandledExceptionEventArgs e)
+	{
+		if (ReaderError is null) throw (Exception)e.ExceptionObject;
+		ReaderError(sender, e);
+	}
+
 	private void OnTaskError(IResult errorResult)
 	{
 		if (UpdateTaskError is null) throw new InvalidOperationException(errorResult.Message, errorResult.SourceException);
-		UpdateTaskError(errorResult);
+		UpdateTaskError(this, new ResultEventArgs(errorResult));
+	}
+
+	private void OnDataLoaded(Type type, object[] items)
+	{
+		if (DataLoaded is null) return;
+		DataLoaded(this, new DataLoadedEventArgs(type, items));
 	}
 }

@@ -7,7 +7,6 @@ namespace Code2.Tools.Csv.ReposTests.Assets;
 public class TestUpdateTask : ICsvUpdateTask
 {
 	public TestUpdateTask() { }
-	public TestUpdateTask(bool throwsError) { ThrowsError = throwsError; }
 
 	public int IntervalInMinutes { get; set; }
 	public int? RetryIntervalInMinutes { get; set; }
