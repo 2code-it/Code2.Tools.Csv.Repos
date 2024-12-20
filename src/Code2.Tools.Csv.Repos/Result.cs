@@ -17,12 +17,12 @@ public class Result : IResult
 	public bool IsSuccess => State == ResultState.Success;
 
 
-	public static IResult Create(ResultState state, string? message = null, Exception? sourceException = null) 
+	public static IResult Create(ResultState state, string? message = null, Exception? sourceException = null)
 		=> new Result(state, message, sourceException);
-	public static IResult Success() 
+	public static IResult Success()
 		=> Create(ResultState.Success);
-	public static IResult Cancel(string? message = null) 
+	public static IResult Cancel(string? message = null)
 		=> Create(ResultState.Cancelled, message);
-	public static IResult Error(string? message = null, Exception? sourceException = null) 
+	public static IResult Error(string? message = null, Exception? sourceException = null)
 		=> Create(ResultState.Error, message, sourceException);
 }
