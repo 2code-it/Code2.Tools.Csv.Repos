@@ -159,19 +159,21 @@ public class CsvReposManager : ICsvReposManager
 
 		if (options.RepositoryType is null && options.RepositoryTypeName is not null) options.RepositoryType = _reflectionUtility.GetRequiredClassType(options.RepositoryTypeName);
 		if (options.ItemType is null && options.ItemTypeName is not null) options.ItemType = _reflectionUtility.GetRequiredClassType(options.ItemTypeName);
-		if (options.RepositoryType is null && options.ItemType is null) throw new InvalidOperationException($"Can't determine repository for file {options.FilePath}");
 
-		if (options.RepositoryType is null)
+		if (options.RepositoryType is null && options.ItemType is not null)
 		{
 			var repoInterfaceType = _reflectionUtility.TypeMakeGeneric(typeof(ICsvRepository<>), options.ItemType!);
 			options.RepositoryType = _reflectionUtility.GetClasses(x => !x.IsGenericType && repoInterfaceType.IsAssignableFrom(x)).FirstOrDefault();
 		}
-		else
+		if (options.RepositoryType is not null && options.ItemType is null)
 		{
 			var repoInterfaceType = _reflectionUtility.GetGenericInterface(options.RepositoryType, typeof(ICsvRepository<>));
 			if (repoInterfaceType is null) throw new InvalidOperationException($"Type {options.RepositoryType.Name} does not implement {typeof(ICsvRepository<>).Name}");
 			options.ItemType = repoInterfaceType.GetGenericArguments()[0];
 		}
+
+		if (options.ItemType is null) throw new InvalidOperationException($"Can't determine type for file {options.FilePath}");
+		if (options.RepositoryType is null) throw new InvalidOperationException($"Can't determine repository type for file {options.FilePath}");
 
 		return options;
 	}
