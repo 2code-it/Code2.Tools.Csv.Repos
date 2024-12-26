@@ -74,10 +74,10 @@ public class HttpUpdateTask : ICsvUpdateTask
 	protected virtual async Task DownloadFileToAsync(string url, Stream fileStream, Dictionary<string, string>? headers = null)
 		=> await _httpUtility.DownloadFileToAsync(url, fileStream, headers);
 
-	protected virtual async Task<byte[]> GetByteArrayAsync(string url, Dictionary<string, string>? headers = null)
+	protected virtual async Task<byte[]> HttpGetByteArrayAsync(string url, Dictionary<string, string>? headers = null)
 		=> await _httpUtility.GetByteArrayAsync(url, headers);
 
-	protected virtual async Task<Dictionary<string, string>> GetHeadersOnlyAsync(string url, Dictionary<string, string>? requestHeaders = null)
+	protected virtual async Task<Dictionary<string, string>> HttpGetHeadersOnlyAsync(string url, Dictionary<string, string>? requestHeaders = null)
 		=> await _httpUtility.GetHeadersOnlyAsync(url, requestHeaders);
 
 	protected virtual string PathGetFullPath(string filePath)
