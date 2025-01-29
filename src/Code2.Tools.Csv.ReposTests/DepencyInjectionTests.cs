@@ -29,7 +29,7 @@ public class DepencyInjectionTests
 		List<Type> serviceTypes = new();
 		services.When(x => x.Add(Arg.Any<ServiceDescriptor>())).Do(x => serviceTypes.Add(x.Arg<ServiceDescriptor>().ServiceType));
 
-		services.AddCsvRepos(x=> x.ReaderReadSize = 1000);
+		services.AddCsvRepos(x => x.ReaderReadSize = 1000);
 
 		Assert.IsTrue(serviceTypes.Contains(typeof(ICsvReposManager)));
 	}

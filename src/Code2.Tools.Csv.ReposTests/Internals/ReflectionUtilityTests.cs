@@ -1,7 +1,6 @@
 ﻿using Code2.Tools.Csv.Repos;
 using Code2.Tools.Csv.Repos.Internals;
 using Code2.Tools.Csv.ReposTests.Assets;
-using NSubstitute;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -142,7 +141,7 @@ public class ReflectionUtilityTests
 		Type expectedGeneric = typeof(ICsvRepository<TestItem>);
 
 		var result = reflectionUtility.GetGenericInterface(source, typeof(ICsvRepository<>));
-		
+
 		Assert.AreEqual(expectedGeneric, result);
 	}
 
