@@ -12,6 +12,7 @@ public static class OptionsExtension
 
 		var list = options.Files?.ToList() ?? new List<CsvFileOptions>();
 		list.Add(new CsvFileOptions { FilePath = filePath, ItemType = typeof(T), ReaderOptions = readerOptions });
+		options.Files = list.ToArray();
 
 		return options;
 	}

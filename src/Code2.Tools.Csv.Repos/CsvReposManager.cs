@@ -108,6 +108,7 @@ public class CsvReposManager : ICsvReposManager
 	{
 		var newOptions = _reflectionUtility.GetShallowCopy(options);
 		if (options.Properties is not null) newOptions.Properties = options.Properties.ToDictionary(x => x.Key, x => x.Value);
+		if (options.TaskType is not null) newOptions.TaskType = options.TaskType;
 		return newOptions;
 	}
 
@@ -156,6 +157,7 @@ public class CsvReposManager : ICsvReposManager
 	{
 		var options = _reflectionUtility.GetShallowCopy(fileOptions);
 		if (fileOptions.ReaderOptions is not null) options.ReaderOptions = _reflectionUtility.GetShallowCopy(fileOptions.ReaderOptions);
+		if (fileOptions.ItemType is not null) options.ItemType = fileOptions.ItemType;
 
 		if (options.RepositoryType is null && options.RepositoryTypeName is not null) options.RepositoryType = _reflectionUtility.GetRequiredClassType(options.RepositoryTypeName);
 		if (options.ItemType is null && options.ItemTypeName is not null) options.ItemType = _reflectionUtility.GetRequiredClassType(options.ItemTypeName);
