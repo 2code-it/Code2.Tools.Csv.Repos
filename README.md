@@ -20,6 +20,9 @@ Tools and services to use and maintain csv repositories
   - RetryIntervalInMinutes, task run interval in minutes in case of an unsuccessful run (optional)
   - IsDisabled, indicates whether the task is disabled (default: false)
   - Properties, collection of task specific property values by name (optional)
+- OnDataLoaded, DataLoaded event handler
+- OnReaderError, ReaderError event handler
+- OnUpdateTaskError, UpdateTaskError event handler
 
 
 ## Example 
